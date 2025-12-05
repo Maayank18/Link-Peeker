@@ -1,0 +1,72 @@
+/* Container reset */
+.lp-card {
+  position: fixed; /* Fixed relative to the Viewport */
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.05);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none; /* Let clicks pass through */
+  border: 1px solid rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+/* Hidden State (for animation) */
+.lp-hidden {
+  opacity: 0;
+  transform: translateY(5px) scale(0.98);
+}
+
+/* The Color Band */
+.lp-band {
+  height: 4px;
+  width: 100%;
+  background: #e0e0e0; /* Default */
+}
+
+/* Category Colors */
+.lp-card[data-category="file"] .lp-band { background: #007AFF; } /* Blue */
+.lp-card[data-category="safety"] .lp-band { background: #FF9500; } /* Orange */
+.lp-card[data-category="dev"] .lp-band { background: #AF52DE; } /* Purple */
+.lp-card[data-category="media"] .lp-band { background: #FF2D55; } /* Pink/Red */
+
+/* Skeleton Loading UI */
+.lp-body {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lp-skeleton-icon {
+  width: 48px;
+  height: 48px;
+  background: #f0f0f0;
+  border-radius: 8px;
+  animation: lp-pulse 1.5s infinite;
+}
+
+.lp-skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lp-line {
+  height: 12px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  animation: lp-pulse 1.5s infinite;
+}
+
+.lp-line-title { width: 80%; }
+.lp-line-meta { width: 50%; }
+
+@keyframes lp-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}

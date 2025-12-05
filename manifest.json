@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Link Peeker",
+  "version": "0.1.0",
+  "description": "Smart link previews with client-side privacy.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["utils.js", "content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icon.png", 
+    "48": "icon.png", 
+    "128": "icon.png"
+  }
+}
