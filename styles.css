@@ -1,38 +1,45 @@
-/* Container reset */
+/* Container - The Main Card */
 .lp-card {
   position: fixed; /* Fixed relative to the Viewport */
-  width: 320px;
+  width: 300px; /* Slightly narrower for a cleaner look */
   background: white;
   border-radius: 12px;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.05);
+  /* Premium Apple-style shadow */
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0,0,0,0.05);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow: hidden;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  pointer-events: none; /* Let clicks pass through */
-  border: 1px solid rgba(0,0,0,0.08);
-  z-index: 10;
+  transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none; /* Let mouse clicks pass through so you don't get stuck */
+  z-index: 2147483647; /* Max Z-Index to stay on top of everything */
+  box-sizing: border-box;
+  text-align: left; /* Ensure text aligns left regardless of site direction */
 }
 
-/* Hidden State (for animation) */
+/* Hidden State (for enter/exit animation) */
 .lp-hidden {
   opacity: 0;
-  transform: translateY(5px) scale(0.98);
+  transform: translateY(8px) scale(0.96);
 }
 
-/* The Color Band */
+/* The Color Band (Top Bar) */
 .lp-band {
   height: 4px;
   width: 100%;
-  background: #e0e0e0; /* Default */
+  /* Background color is set dynamically by JS now */
 }
 
-/* Category Colors */
-.lp-card[data-category="file"] .lp-band { background: #007AFF; } /* Blue */
-.lp-card[data-category="safety"] .lp-band { background: #FF9500; } /* Orange */
-.lp-card[data-category="dev"] .lp-band { background: #AF52DE; } /* Purple */
-.lp-card[data-category="media"] .lp-band { background: #FF2D55; } /* Pink/Red */
+/* The Content Container (Holds Title, Desc, Footer) */
+.lp-content {
+  padding: 16px;
+  /* Reset line-height to prevent website styles from breaking card */
+  line-height: 1.5; 
+  color: #333;
+}
 
-/* Skeleton Loading UI */
+/* --- Skeleton Loading State (Shown while fetching) --- */
 .lp-body {
   padding: 16px;
   display: flex;
@@ -41,11 +48,12 @@
 }
 
 .lp-skeleton-icon {
-  width: 48px;
-  height: 48px;
-  background: #f0f0f0;
+  width: 40px;
+  height: 40px;
+  background: #f3f4f6;
   border-radius: 8px;
-  animation: lp-pulse 1.5s infinite;
+  flex-shrink: 0;
+  animation: lp-pulse 1.5s ease-in-out infinite;
 }
 
 .lp-skeleton-lines {
@@ -56,15 +64,16 @@
 }
 
 .lp-line {
-  height: 12px;
-  background: #f0f0f0;
+  height: 10px;
+  background: #f3f4f6;
   border-radius: 4px;
-  animation: lp-pulse 1.5s infinite;
+  animation: lp-pulse 1.5s ease-in-out infinite;
 }
 
-.lp-line-title { width: 80%; }
-.lp-line-meta { width: 50%; }
+.lp-line-title { width: 70%; }
+.lp-line-meta { width: 40%; }
 
+/* Soft Pulse Animation */
 @keyframes lp-pulse {
   0% { opacity: 0.6; }
   50% { opacity: 1; }
