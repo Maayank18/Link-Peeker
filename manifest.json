@@ -3,7 +3,7 @@
   "name": "Link Peeker",
   "version": "0.1.0",
   "description": "Smart link previews with client-side privacy.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
