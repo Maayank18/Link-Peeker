@@ -21,9 +21,15 @@ function parseSmartHTML(html, url) {
   // 2. Description
   let desc = getMeta("og:description") || getMeta("twitter:description") || getMeta("description");
   if (!desc) {
-    const firstP = doc.querySelector("p");
-    if (firstP && firstP.textContent.trim().length > 80) {
-      desc = firstP.textContent.trim().substring(0, 150) + "...";
+    const paragraphs = Array.from(doc.querySelectorAll("p"));
+    for (const p of paragraphs) {
+        const clone = p.cloneNode(true);
+        clone.querySelectorAll('script, style').forEach(el => el.remove());
+        const text = clone.textContent.trim();
+        if (text.length > 80) {
+            desc = text.substring(0, 150) + "...";
+            break;
+        }
     }
   }
 

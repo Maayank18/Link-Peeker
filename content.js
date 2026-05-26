@@ -5,10 +5,46 @@ let shadowRoot = null;
 let cardContainer = null;
 let currentLink = null;
 let intentTimer = null;
+let hideTimer = null; // Professional delay-hide timer
+
+// --- 0. ORPHANED SCRIPT / CONTEXT INVALIDATION SAFETY ---
+function isContextInvalidated() {
+  try {
+    return typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id;
+  } catch (e) {
+    return true;
+  }
+}
+
+function cleanupOrphanedScript() {
+  try {
+    document.removeEventListener('mouseover', handleMouseOver);
+    document.removeEventListener('mouseout', handleMouseOut);
+  } catch (e) {}
+  
+  if (intentTimer) {
+    try { intentTimer.cancel(); } catch (e) {}
+  }
+  
+  if (hideTimer) {
+    try { clearTimeout(hideTimer); } catch (e) {}
+  }
+  
+  if (shadowHost) {
+    try { shadowHost.remove(); } catch (e) {}
+  }
+}
 
 // --- 1. SETUP & UI CREATION ---
 function initShadowDOM() {
-  if (document.getElementById('link-peeker-host')) return;
+  if (isContextInvalidated()) {
+    return;
+  }
+
+  const existingHost = document.getElementById('link-peeker-host');
+  if (existingHost) {
+    try { existingHost.remove(); } catch (e) {}
+  }
 
   shadowHost = document.createElement('div');
   shadowHost.id = 'link-peeker-host';
@@ -22,10 +58,21 @@ function initShadowDOM() {
 
   shadowRoot = shadowHost.attachShadow({ mode: 'open' });
 
-  const styleLink = document.createElement('link');
-  styleLink.rel = 'stylesheet';
-  styleLink.href = chrome.runtime.getURL('styles.css');
-  shadowRoot.appendChild(styleLink);
+  let styleUrl = '';
+  try {
+    if (chrome && chrome.runtime && chrome.runtime.getURL) {
+      styleUrl = chrome.runtime.getURL('styles.css');
+    }
+  } catch (e) {
+    console.warn("Link Peeker: Failed to load stylesheet URL.", e);
+  }
+
+  if (styleUrl) {
+    const styleLink = document.createElement('link');
+    styleLink.rel = 'stylesheet';
+    styleLink.href = styleUrl;
+    shadowRoot.appendChild(styleLink);
+  }
 
   cardContainer = document.createElement('div');
   cardContainer.className = 'lp-card lp-hidden';
@@ -36,6 +83,7 @@ function initShadowDOM() {
 
 // --- 2. RENDERING LOGIC ---
 function renderSkeleton() {
+  if (!cardContainer) return;
   cardContainer.innerHTML = `
     <div class="lp-band" style="background: #e0e0e0"></div>
     <div class="lp-body-skeleton">
@@ -48,7 +96,7 @@ function renderSkeleton() {
 }
 
 function renderData(data) {
-  if (!data) return;
+  if (!data || !cardContainer) return;
 
   // Color Coding (Use theme color if available, otherwise fallback)
   let bandColor = "#34C759"; // Web
@@ -153,12 +201,35 @@ function escapeHtml(str) {
 }
 
 // --- 3. INTERACTION & POSITIONING LOGIC ---
+
+function startHideTimer() {
+  if (isContextInvalidated()) {
+    cleanupOrphanedScript();
+    return;
+  }
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    hideCard();
+    currentLink = null;
+  }, 250); // Premium grace period (250ms)
+}
+
+function cancelHideTimer() {
+  clearTimeout(hideTimer);
+}
+
 const showCardAction = () => {
-  if (!currentLink) return;
+  if (isContextInvalidated()) {
+    cleanupOrphanedScript();
+    return;
+  }
+
+  cancelHideTimer();
+
+  if (!currentLink || !cardContainer) return;
 
   const rect = currentLink.getBoundingClientRect();
   const cardWidth = 320;
-  // Estimate minimum height
   const minCardHeight = 160; 
 
   let top = rect.bottom + 10;
@@ -184,83 +255,148 @@ const showCardAction = () => {
 
   const linkText = (currentLink.innerText || currentLink.textContent || "").trim();
 
-  chrome.runtime.sendMessage({ 
-    type: "PEEK_REQUEST", 
-    url: currentLink.href,
-    fallbackTitle: linkText 
-  }, (data) => {
-    if (chrome.runtime.lastError) {
-        console.error("Link Peeker Error:", chrome.runtime.lastError);
-        hideCard();
-        return;
-    }
-    
-    if (!data) {
-        hideCard();
-        return;
-    }
-
-    // Check if we are still hovering the exact same link
-    if (!currentLink || currentLink.href !== data.url) return;
-    
-    renderData(data);
-    
-    // Adjust position in case image made card taller and it clips the bottom
-    setTimeout(() => {
-        if (!cardContainer) return;
-        const newRect = cardContainer.getBoundingClientRect();
-        if (newRect.bottom > window.innerHeight) {
-            let adjustedTop = window.innerHeight - newRect.height - 10;
-            if (adjustedTop < 10) adjustedTop = 10;
-            cardContainer.style.top = `${adjustedTop}px`;
+  try {
+    if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ 
+        type: "PEEK_REQUEST", 
+        url: currentLink.href,
+        fallbackTitle: linkText 
+      }, (data) => {
+        if (isContextInvalidated()) {
+          cleanupOrphanedScript();
+          return;
         }
-    }, 50);
-  });
+
+        if (chrome.runtime && chrome.runtime.lastError) {
+            console.error("Link Peeker Error:", chrome.runtime.lastError);
+            hideCard();
+            return;
+        }
+        
+        if (!data) {
+            hideCard();
+            return;
+        }
+
+        // Check if we are still hovering the exact same link
+        if (!currentLink || currentLink.href !== data.url) return;
+        
+        renderData(data);
+        
+        // Adjust position in case image made card taller and it clips the bottom
+        setTimeout(() => {
+            if (isContextInvalidated()) {
+              cleanupOrphanedScript();
+              return;
+            }
+            if (!cardContainer) return;
+            const newRect = cardContainer.getBoundingClientRect();
+            if (newRect.bottom > window.innerHeight) {
+                let adjustedTop = window.innerHeight - newRect.height - 10;
+                if (adjustedTop < 10) adjustedTop = 10;
+                cardContainer.style.top = `${adjustedTop}px`;
+            }
+        }, 50);
+      });
+    } else {
+      cleanupOrphanedScript();
+    }
+  } catch (e) {
+    console.warn("Link Peeker: Communication failed, extension may have been reloaded.", e);
+    cleanupOrphanedScript();
+  }
 };
 
 function hideCard() {
+  if (isContextInvalidated()) {
+    cleanupOrphanedScript();
+    return;
+  }
+
   if (currentLink && currentLink.href) {
-    chrome.runtime.sendMessage({ type: "ABORT_PEEK", url: currentLink.href });
+    try {
+      if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ type: "ABORT_PEEK", url: currentLink.href });
+      }
+    } catch (e) {
+      cleanupOrphanedScript();
+      return;
+    }
   }
   if (cardContainer) cardContainer.classList.add('lp-hidden');
 }
 
 // --- 4. EVENT LISTENERS ---
-intentTimer = window.Utils.createIntentTimer(showCardAction, 600);
 
-document.addEventListener('mouseover', (e) => {
+function handleMouseOver(e) {
+  if (isContextInvalidated()) {
+    cleanupOrphanedScript();
+    return;
+  }
+
   const link = e.target.closest('a');
   
   if (!link) {
-    if (currentLink) {
-        intentTimer.cancel();
-        hideCard();
-        currentLink = null;
-    }
     return;
   }
 
   // Ignore javascript links or anchor links on the same page
   if (!link.href || link.href.startsWith('javascript') || link.getAttribute('href').startsWith('#')) return;
 
+  // Hovering a valid link: cancel any scheduled hides!
+  cancelHideTimer();
+
   if (link !== currentLink) {
     if (currentLink) { hideCard(); }
     currentLink = link;
     intentTimer.start();
   }
-});
+}
 
-document.addEventListener('mouseout', (e) => {
+function handleMouseOut(e) {
+  if (isContextInvalidated()) {
+    cleanupOrphanedScript();
+    return;
+  }
+
   const link = e.target.closest('a');
   if (!link) return;
 
   const related = e.relatedTarget;
+  
+  // If moving inside the same link, ignore
   if (related && link.contains(related)) return;
 
-  intentTimer.cancel();
-  hideCard();
-  currentLink = null;
-});
+  // If moving into our shadow host or card, ignore
+  if (related && (related.id === 'link-peeker-host' || related === shadowHost || (cardContainer && cardContainer.contains(related)))) {
+    cancelHideTimer();
+    return;
+  }
 
-// Boot
+  // Cancel show intent if moved out before loading
+  intentTimer.cancel();
+  
+  // Start the grace period hide timer
+  startHideTimer();
+}
+
+// Boot up
+if (window.Utils) {
+  intentTimer = window.Utils.createIntentTimer(showCardAction, 600);
+}
+
+document.addEventListener('mouseover', handleMouseOver);
+document.addEventListener('mouseout', handleMouseOut);
+
+// Boot DOM
 initShadowDOM();
+
+if (cardContainer) {
+  cardContainer.addEventListener('mouseenter', () => {
+    cancelHideTimer();
+  });
+
+  cardContainer.addEventListener('mouseleave', () => {
+    startHideTimer();
+  });
+}
