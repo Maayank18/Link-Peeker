@@ -13,7 +13,7 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow: hidden;
   transition: opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 2147483647;
   box-sizing: border-box;
   text-align: left;
@@ -23,8 +23,31 @@
 
 .lp-hidden {
   opacity: 0;
+  pointer-events: none;
   transform: translateY(8px) scale(0.96);
 }
+
+/* --- Safety Verdicts --- */
+.lp-card.verdict-green { border: 2px solid #34C759; box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 0 12px rgba(52, 199, 89, 0.3); }
+.lp-card.verdict-yellow { border: 2px solid #FFCC00; box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 0 12px rgba(255, 204, 0, 0.3); }
+.lp-card.verdict-red { border: 2px solid #FF3B30; box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 0 15px rgba(255, 59, 48, 0.4); }
+
+.lp-copy-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0,0,0,0.05);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #555;
+  transition: background 0.2s;
+}
+.lp-copy-btn:hover { background: rgba(0,0,0,0.1); }
+.lp-copy-btn:active { background: rgba(0,0,0,0.15); }
 
 .lp-band {
   height: 4px;
@@ -83,6 +106,12 @@
   font-weight: 600; 
   text-transform: uppercase; 
   letter-spacing: 0.5px;
+}
+
+.lp-redirect-warn {
+  color: #FF9500;
+  margin-left: 6px;
+  font-size: 10px;
 }
 
 .lp-favicon {
@@ -193,4 +222,9 @@
   .lp-skeleton-icon, .lp-line {
     background: #333;
   }
+  .lp-copy-btn {
+    background: rgba(255,255,255,0.1);
+    color: #eee;
+  }
+  .lp-copy-btn:hover { background: rgba(255,255,255,0.15); }
 }

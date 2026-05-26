@@ -1,7 +1,7 @@
 // utils.js
 // Shared utilities used by content script
 
-const Utils = {
+window.Utils = {
   // Simple intent timer (start / cancel)
   createIntentTimer: (callback, ms) => {
     let timer = null;

@@ -71,6 +71,11 @@ function renderData(data) {
               ${data.platformData.stars ? `<div class="lp-smart-item">⭐ ${escapeHtml(data.platformData.stars)}</div>` : ''}
               ${data.platformData.forks ? `<div class="lp-smart-item">🍴 ${escapeHtml(data.platformData.forks)}</div>` : ''}
           </div>`;
+      } else if (data.platformData.platform === "youtube") {
+          smartHTML = `<div class="lp-smart-data">
+              ${data.platformData.duration ? `<div class="lp-smart-item">⏱️ ${escapeHtml(data.platformData.duration)}</div>` : ''}
+              ${data.platformData.channel ? `<div class="lp-smart-item">📺 ${escapeHtml(data.platformData.channel)}</div>` : ''}
+          </div>`;
       }
   }
 
@@ -96,13 +101,24 @@ function renderData(data) {
       `;
   }
 
+  // Cleanup old verdict classes
+  cardContainer.classList.remove('verdict-green', 'verdict-yellow', 'verdict-red');
+  if (data.safetyVerdict) {
+      cardContainer.classList.add(`verdict-${data.safetyVerdict}`);
+  }
+
   // Footer
   const redirectIcon = data.isRedirected ? '<span style="color:#666; font-size:12px; margin-right:4px;">↪</span>' : '';
-  const domainText = data.domain || data.url;
+  let originalDomain = "Unknown";
+  try { originalDomain = new URL(data.url).hostname; } catch(e){}
+  
+  const domainText = originalDomain;
+  const redirectWarn = data.isRedirected && data.domain ? `<span class="lp-redirect-warn">➔ ${escapeHtml(data.domain)}</span>` : '';
   const faviconHTML = data.favicon ? `<img src="${escapeHtml(data.favicon)}" class="lp-favicon" onerror="this.style.display='none'" />` : '';
 
   cardContainer.innerHTML = `
     <div class="lp-band" style="background: ${bandColor}"></div>
+    <button class="lp-copy-btn" id="lp-copy-btn">Copy</button>
     ${imageHTML}
     <div class="lp-content">
        <h3 class="lp-title">
@@ -110,10 +126,23 @@ function renderData(data) {
        </h3>
        ${bodyHTML}
        <div class="lp-footer">
-         ${faviconHTML}${redirectIcon}<span class="lp-domain-text">${escapeHtml(domainText)}</span>
+         ${faviconHTML}${redirectIcon}<span class="lp-domain-text">${escapeHtml(domainText)}${redirectWarn}</span>
        </div>
     </div>
   `;
+
+  // Attach Copy Event
+  const copyBtn = shadowRoot.getElementById('lp-copy-btn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // prevent closing
+      const textToCopy = `Title: ${data.title}\nURL: ${data.url}\nDescription: ${data.description || 'N/A'}`;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        copyBtn.innerText = "Copied!";
+        setTimeout(() => { copyBtn.innerText = "Copy"; }, 2000);
+      });
+    });
+  }
 }
 
 function escapeHtml(str) {
@@ -153,15 +182,26 @@ const showCardAction = () => {
 
   renderSkeleton();
 
-  const linkText = currentLink.innerText.trim();
+  const linkText = (currentLink.innerText || currentLink.textContent || "").trim();
 
   chrome.runtime.sendMessage({ 
     type: "PEEK_REQUEST", 
     url: currentLink.href,
     fallbackTitle: linkText 
   }, (data) => {
+    if (chrome.runtime.lastError) {
+        console.error("Link Peeker Error:", chrome.runtime.lastError);
+        hideCard();
+        return;
+    }
+    
+    if (!data) {
+        hideCard();
+        return;
+    }
+
     // Check if we are still hovering the exact same link
-    if (!currentLink || (data.url && currentLink.href !== data.url)) return;
+    if (!currentLink || currentLink.href !== data.url) return;
     
     renderData(data);
     
@@ -179,11 +219,14 @@ const showCardAction = () => {
 };
 
 function hideCard() {
+  if (currentLink && currentLink.href) {
+    chrome.runtime.sendMessage({ type: "ABORT_PEEK", url: currentLink.href });
+  }
   if (cardContainer) cardContainer.classList.add('lp-hidden');
 }
 
 // --- 4. EVENT LISTENERS ---
-intentTimer = Utils.createIntentTimer(showCardAction, 600);
+intentTimer = window.Utils.createIntentTimer(showCardAction, 600);
 
 document.addEventListener('mouseover', (e) => {
   const link = e.target.closest('a');

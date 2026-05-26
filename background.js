@@ -62,21 +62,50 @@ async function setupOffscreenDocument() {
   creating = null;
 }
 
+// --- URL Sanitization ---
+function sanitizeUrl(rawUrl) {
+    try {
+        const urlObj = new URL(rawUrl);
+        const paramsToDelete = [];
+        urlObj.searchParams.forEach((val, key) => {
+            if (key.startsWith('utm_') || key === 'ref') paramsToDelete.push(key);
+        });
+        paramsToDelete.forEach(k => urlObj.searchParams.delete(k));
+        return urlObj.toString();
+    } catch {
+        return rawUrl;
+    }
+}
+
 // --- Message Listener ---
+const activeRequests = new Map();
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "PEEK_REQUEST") {
-    performIntelligentFetch(request.url, request.fallbackTitle)
+    const cleanUrl = sanitizeUrl(request.url);
+    performIntelligentFetch(cleanUrl, request.fallbackTitle)
       .then(data => sendResponse(data))
       .catch(err => {
-        console.error("Peek failed:", err);
-        sendResponse({ 
-          category: "error", 
-          title: request.fallbackTitle || "Preview Unavailable", 
-          description: "Connection failed or took too long.", 
-          url: request.url 
-        });
+        if (err.name === 'AbortError') {
+           sendResponse({ category: "aborted" });
+        } else {
+           console.error("Peek failed:", err);
+           sendResponse({ 
+             category: "error",
+             safetyVerdict: "red",
+             title: request.fallbackTitle || "Preview Unavailable", 
+             description: "Connection failed or took too long.", 
+             url: cleanUrl 
+           });
+        }
       });
     return true; // Keep channel open for async response
+  } else if (request.type === "ABORT_PEEK") {
+    const cleanUrl = sanitizeUrl(request.url);
+    if (activeRequests.has(cleanUrl)) {
+        activeRequests.get(cleanUrl).abort();
+        activeRequests.delete(cleanUrl);
+    }
   }
 });
 
@@ -88,8 +117,9 @@ async function performIntelligentFetch(originalUrl, fallbackTitle) {
 
   // 1. The "X-Ray" Fetch
   const controller = new AbortController();
+  activeRequests.set(originalUrl, controller);
   // Abort if fetch takes longer than 5 seconds to prevent hanging
-  const timeoutId = setTimeout(() => controller.abort(), 5000); 
+  const timeoutId = setTimeout(() => controller.abort(), 5000);  
 
   try {
     const response = await fetch(originalUrl, { 
@@ -97,6 +127,7 @@ async function performIntelligentFetch(originalUrl, fallbackTitle) {
       signal: controller.signal,
       headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
     });
+    activeRequests.delete(originalUrl);
     clearTimeout(timeoutId);
 
     const finalUrl = response.url; 
@@ -105,6 +136,8 @@ async function performIntelligentFetch(originalUrl, fallbackTitle) {
     const type = response.headers.get("content-type") || "";
     const sizeHeader = response.headers.get("content-length");
     const lastModifiedHeader = response.headers.get("last-modified");
+    
+    const safetyVerdict = getSafetyVerdict(originalUrl, finalUrl, type, sizeHeader);
 
     // --- PATH A: IT IS A FILE (PDF, ZIP, EXE) ---
     if (isFile(type, finalUrl)) {
@@ -112,6 +145,7 @@ async function performIntelligentFetch(originalUrl, fallbackTitle) {
       
       const fileData = {
         category: getFileCategory(type, finalUrl),
+        safetyVerdict,
         title: getFilenameFromUrl(finalUrl),
         description: `Type: ${type.split(';')[0]}`,
         size: formatBytes(sizeHeader),
@@ -132,16 +166,24 @@ async function performIntelligentFetch(originalUrl, fallbackTitle) {
     await setupOffscreenDocument();
     
     // Parse using Offscreen DOMParser
-    const meta = await chrome.runtime.sendMessage({
-      type: "PARSE_HTML",
-      html: html,
-      url: finalUrl
-    });
+    let meta = {};
+    try {
+      meta = await chrome.runtime.sendMessage({
+        type: "PARSE_HTML",
+        html: html,
+        url: finalUrl
+      });
+    } catch (e) {
+      console.error("Offscreen parsing error:", e);
+    }
+    
+    if (!meta) meta = {};
 
     const displayDate = meta.date ? formatDate(meta.date) : formatDate(lastModifiedHeader);
 
     const webData = {
       category: determineWebCategory(finalUrl),
+      safetyVerdict,
       title: meta.title || fallbackTitle || "No Title Found",
       description: meta.desc || "No description available",
       image: meta.image,
@@ -159,15 +201,38 @@ async function performIntelligentFetch(originalUrl, fallbackTitle) {
     return webData;
 
   } catch (error) {
+    activeRequests.delete(originalUrl);
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-       console.log("Fetch safely aborted.");
+       console.log("Fetch safely aborted for:", originalUrl);
     }
     throw error;
   }
 }
 
 // --- INTELLIGENCE HELPERS ---
+
+function getSafetyVerdict(originalUrl, finalUrl, type, sizeBytes) {
+    try {
+        const origUrlObj = new URL(originalUrl);
+        const finalUrlObj = new URL(finalUrl);
+        
+        const isRedirected = origUrlObj.hostname !== finalUrlObj.hostname;
+        const isHttp = finalUrlObj.protocol === "http:";
+        
+        const isExec = isFile(type, finalUrl) && getFileCategory(type, finalUrl) === "safety";
+        
+        // > 50MB or exe or blacklisted
+        if (isExec || (sizeBytes && sizeBytes > 50 * 1024 * 1024)) return "red"; 
+        
+        // > 5MB, http, redirect
+        if (isHttp || isRedirected || (sizeBytes && sizeBytes > 5 * 1024 * 1024)) return "yellow"; 
+        
+        return "green";
+    } catch {
+        return "yellow";
+    }
+}
 
 function isFile(mime, url) {
   if (mime.includes("text/html")) return false;
